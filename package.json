@@ -1,7 +1,7 @@
 {
   "name": "homebridge-ambisense",
   "displayName": "Ambisense Homebridge",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "A Homebridge plugin for Ambisense air quality monitors via the Ambisense Consumer API.",
   "keywords": [
     "ambisense",
