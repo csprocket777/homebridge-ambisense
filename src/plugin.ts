@@ -177,7 +177,7 @@ export class AmbisensePlugin implements AccessoryPlugin {
     }
 
     try {
-      this.latestSamples = await this.ambisenseApi.getLatestSamples(this.ambisenseConfig.serialNumber);
+      this.latestSamples = await this.ambisenseApi.getLatestSamples();
       this.log.info(JSON.stringify(this.latestSamples.data));
     }
     catch (err) {
