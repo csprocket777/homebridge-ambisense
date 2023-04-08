@@ -1,5 +1,4 @@
 import axios, {Axios} from "axios";
-import { AccessToken, ClientCredentials } from "simple-oauth2";
 
 export class AmbisenseApi {
   // private accessToken?: AccessToken;
@@ -54,7 +53,7 @@ export class AmbisenseApi {
     // this.client = new ClientCredentials(config);
   }
 
-  public async getLatestSamples(id: string) {
+  public async getLatestSamples() {
     if (this.client == null) {
       throw new Error("Ambisense API Client not initialized due to invalid configuration...");
     }
