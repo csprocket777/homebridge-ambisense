@@ -1,7 +1,7 @@
 import { API } from "homebridge";
 
-import { AirthingsPlugin } from "./plugin";
+import { AmbisensePlugin } from "./plugin";
 
 export = (api: API) => {
-  api.registerAccessory("Airthings", AirthingsPlugin);
+  api.registerAccessory("Ambisense", AmbisensePlugin);
 };

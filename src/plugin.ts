@@ -1,37 +1,81 @@
-import { AirthingsApi, AirthingsApiDeviceSample } from "./api";
-import { AirthingsDevice, AirthingsDeviceInfo } from "./device";
+import { AmbisenseApi, AmbisenseApiDeviceSample } from "./api";
+import { AmbisenseDevice, AmbisenseDeviceInfo } from "./device";
 import { AccessoryConfig, AccessoryPlugin, API, Formats, Logging, Perms, Service } from "homebridge";
 
-export class AirthingsPlugin implements AccessoryPlugin {
+export class AmbisensePlugin implements AccessoryPlugin {
   private readonly log: Logging;
   private readonly timer: NodeJS.Timer;
 
-  private readonly airthingsApi: AirthingsApi;
-  private readonly airthingsConfig: AirthingsPluginConfig;
-  private readonly airthingsDevice: AirthingsDeviceInfo;
+  private readonly ambisenseApi: AmbisenseApi;
+  private readonly ambisenseConfig: AmbisensePluginConfig;
+  private readonly ambisenseDevice: AmbisenseDeviceInfo;
 
   private readonly informationService: Service;
-  private readonly batteryService: Service;
   private readonly airQualityService: Service;
   private readonly temperatureService: Service;
   private readonly humidityService: Service;
   private readonly carbonDioxideService: Service;
-  private readonly airPressureService: Service;
-  private readonly radonService: Service;
 
-  private latestSamples: AirthingsApiDeviceSample = {
-    data: {}
+  private latestSamples: AmbisenseApiDeviceSample = {
+    // data: {
+      // events:[
+      // {
+        id: "",
+        name: "",
+        data: {
+          firmware_version: undefined,
+          uptime: undefined,
+          co2: undefined,
+          temperature: undefined,
+          humidity: undefined,
+          tvoc: undefined,
+          pm1: undefined,
+          pm2_5: undefined,
+          pm4: undefined,
+          pm10: undefined,
+          voltage: undefined,
+          mac_address: undefined,
+          host_name: undefined,
+          rssi: undefined,
+          bssid: undefined,
+          local_ip: undefined,
+          subnet_mask: undefined,
+          gateway_ip: undefined,
+          dns1: undefined,
+          dns2: undefined,
+          error_code: undefined,
+        },
+        timestamp: undefined,
+        location: undefined,
+        source:{
+          name: undefined,
+        },
+        state: {
+          cisco: undefined,
+          co2Min: undefined,
+          co2Count: undefined,
+          co2Delta: undefined,
+          notified: undefined,
+          co2_limit: undefined,
+          firstCalib: undefined,
+          location_home: undefined,
+          Weather_Station: undefined,
+          location_office: undefined,
+        }
+      // }
+    // ]
+    // }
   };
 
-  constructor(log: Logging, config: AirthingsPluginConfig, api: API) {
+  constructor(log: Logging, config: AmbisensePluginConfig, api: API) {
     this.log = log;
 
-    if (config.clientId == undefined) {
-      this.log.error("Missing required config value: clientId");
+    if (config.deviceId == undefined) {
+      this.log.error("Missing required config value: deviceId");
     }
 
-    if (config.clientSecret == undefined) {
-      this.log.error("Missing required config value: clientSecret");
+    if (config.deviceToken == undefined) {
+      this.log.error("Missing required config value: deviceToken");
     }
 
     if (config.serialNumber == undefined) {
@@ -58,61 +102,34 @@ export class AirthingsPlugin implements AccessoryPlugin {
       config.tokenScope = 'read:device:current_values';
     }
 
-    this.airthingsApi = new AirthingsApi(config.tokenScope, config.clientId, config.clientSecret);
-    this.airthingsConfig = config;
-    this.airthingsDevice = AirthingsDevice.getDevice(config.serialNumber);
+    this.ambisenseApi = new AmbisenseApi(config.deviceId, config.deviceToken, config.dataPackage);
+    this.ambisenseConfig = config;
+    this.ambisenseDevice = AmbisenseDevice.getDevice(config.serialNumber);
 
-    this.log.info(`Device Model: ${this.airthingsDevice.model}`);
-    this.log.info(`Serial Number: ${this.airthingsConfig.serialNumber}`);
-    this.log.info(`Radon Leak Sensor: ${this.airthingsDevice.sensors.radonShortTermAvg ? (this.airthingsConfig.radonLeakThreshold != undefined ? "Enabled" : "Disabled") : "Not Supported"}`);
-    if (this.airthingsDevice.sensors.radonShortTermAvg && this.airthingsConfig.radonLeakThreshold != undefined) {
-      this.log.info(`Radon Leak Threshold: ${this.airthingsConfig.radonLeakThreshold} Bq/m³`);
-    }
-    this.log.info(`Refresh Interval: ${this.airthingsConfig.refreshInterval}s`);
-    this.log.info(`Token Scope: ${this.airthingsConfig.tokenScope}`);
+    this.log.info(`Device Model: ${this.ambisenseDevice.model}`);
+    this.log.info(`Serial Number: ${this.ambisenseConfig.serialNumber}`);
+    this.log.info(`Refresh Interval: ${this.ambisenseConfig.refreshInterval}s`);
+    // this.log.info(`Token Scope: ${this.ambisenseConfig.tokenScope}`);
 
     // HomeKit Accessory Information Service
     this.informationService = new api.hap.Service.AccessoryInformation()
-      .setCharacteristic(api.hap.Characteristic.Manufacturer, "Airthings")
-      .setCharacteristic(api.hap.Characteristic.Model, this.airthingsDevice.model)
+      .setCharacteristic(api.hap.Characteristic.Manufacturer, "Ambisense")
+      .setCharacteristic(api.hap.Characteristic.Model, this.ambisenseDevice.model)
       .setCharacteristic(api.hap.Characteristic.Name, config.name)
       .setCharacteristic(api.hap.Characteristic.SerialNumber, config.serialNumber)
       .setCharacteristic(api.hap.Characteristic.FirmwareRevision, "Unknown");
 
-    // HomeKit Battery Service
-    this.batteryService = new api.hap.Service.Battery("Battery");
 
     // HomeKit Air Quality Service
     this.airQualityService = new api.hap.Service.AirQualitySensor("Air Quality");
 
-    if (this.airthingsDevice.sensors.mold) {
-      this.airQualityService.addCharacteristic(new api.hap.Characteristic("Mold", "68F9B9E6-88C7-4FB3-B8CE-60205F9F280E", {
-        format: Formats.UINT16,
-        perms: [Perms.NOTIFY, Perms.PAIRED_READ],
-        unit: "Risk",
-        minValue: 0,
-        maxValue: 10,
-        minStep: 1
-      }));
-    }
-
-    if (this.airthingsDevice.sensors.radonShortTermAvg) {
-      this.airQualityService.addCharacteristic(new api.hap.Characteristic("Radon", "B42E01AA-ADE7-11E4-89D3-123B93F75CBA", {
-        format: Formats.UINT16,
-        perms: [Perms.NOTIFY, Perms.PAIRED_READ],
-        unit: "Bq/m³",
-        minValue: 0,
-        maxValue: 20000,
-        minStep: 1
-      }));
-    }
 
     this.airQualityService.getCharacteristic(api.hap.Characteristic.VOCDensity).setProps({
       unit: "µg/m³",
       maxValue: 65535
     });
 
-    if (this.airthingsDevice.sensors.voc) {
+    if (this.ambisenseDevice.sensors.tvoc) {
       this.airQualityService.addCharacteristic(new api.hap.Characteristic("VOC Density (ppb)", "E5B6DA60-E041-472A-BE2B-8318B8A724C5", {
         format: Formats.UINT16,
         perms: [Perms.NOTIFY, Perms.PAIRED_READ],
@@ -132,60 +149,35 @@ export class AirthingsPlugin implements AccessoryPlugin {
     // HomeKit CO2 Service
     this.carbonDioxideService = new api.hap.Service.CarbonDioxideSensor("CO2");
 
-    // Eve Air Pressure Service
-    this.airPressureService = new api.hap.Service("Air Pressure", "e863f00a-079e-48ff-8f27-9c2605a29f52");
-
-    this.airPressureService.addCharacteristic(new api.hap.Characteristic("Air Pressure", "e863f10f-079e-48ff-8f27-9c2605a29f52", {
-      format: Formats.UINT16,
-      perms: [Perms.NOTIFY, Perms.PAIRED_READ],
-      unit: "mBar",
-      minValue: 0,
-      maxValue: 1200,
-      minStep: 1,
-    }));
-
-    this.airPressureService.addCharacteristic(api.hap.Characteristic.StatusActive);
-
-    // HomeKit Radon (Leak) Service
-    this.radonService = new api.hap.Service.LeakSensor("Radon");
-
     this.refreshCharacteristics(api);
     this.timer = setInterval(async () => { await this.refreshCharacteristics(api) }, config.refreshInterval * 1000);
   }
 
   getServices(): Service[] {
-    const services = [this.informationService, this.batteryService, this.airQualityService];
+    const services = [this.informationService, this.airQualityService];
 
-    if (this.airthingsDevice.sensors.temp) {
+    if (this.ambisenseDevice.sensors.temperature) {
       services.push(this.temperatureService);
     }
 
-    if (this.airthingsDevice.sensors.humidity) {
+    if (this.ambisenseDevice.sensors.humidity) {
       services.push(this.humidityService);
     }
 
-    if (this.airthingsDevice.sensors.co2) {
+    if (this.ambisenseDevice.sensors.co2) {
       services.push(this.carbonDioxideService);
-    }
-
-    if (this.airthingsDevice.sensors.pressure) {
-      services.push(this.airPressureService);
-    }
-
-    if (this.airthingsDevice.sensors.radonShortTermAvg && this.airthingsConfig.radonLeakThreshold != undefined) {
-      services.push(this.radonService);
     }
 
     return services;
   }
 
   async getLatestSamples() {
-    if (this.airthingsConfig.serialNumber == undefined) {
+    if (this.ambisenseConfig.serialNumber == undefined) {
       return;
     }
 
     try {
-      this.latestSamples = await this.airthingsApi.getLatestSamples(this.airthingsConfig.serialNumber);
+      this.latestSamples = await this.ambisenseApi.getLatestSamples(this.ambisenseConfig.serialNumber);
       this.log.info(JSON.stringify(this.latestSamples.data));
     }
     catch (err) {
@@ -198,63 +190,48 @@ export class AirthingsPlugin implements AccessoryPlugin {
   async refreshCharacteristics(api: API) {
     await this.getLatestSamples();
 
-    // HomeKit Battery Service
-    this.batteryService.getCharacteristic(api.hap.Characteristic.BatteryLevel).updateValue(
-      this.latestSamples.data.battery ?? 100
-    );
-
-    this.batteryService.getCharacteristic(api.hap.Characteristic.StatusLowBattery).updateValue(
-      this.latestSamples.data.battery == undefined || this.latestSamples.data.battery > 10
-        ? api.hap.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL
-        : api.hap.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW
-    );
+    this.informationService.setCharacteristic(api.hap.Characteristic.FirmwareRevision, this.latestSamples.data.firmware_version ?? "")
 
     // HomeKit Air Quality Service
     this.airQualityService.getCharacteristic(api.hap.Characteristic.AirQuality).updateValue(
       this.getAirQuality(api, this.latestSamples)
     );
 
-    if (this.airthingsDevice.sensors.mold) {
-      this.airQualityService.getCharacteristic("Mold")?.updateValue(
-        this.latestSamples.data.mold ?? 0
-      );
-    }
-
-    if (this.airthingsDevice.sensors.pm25) {
+    if (this.ambisenseDevice.sensors.pm2_5) {
       this.airQualityService.getCharacteristic(api.hap.Characteristic.PM2_5Density).updateValue(
-        this.latestSamples.data.pm25 ?? 0
+        this.latestSamples.data.pm2_5 ?? 0
       );
     }
 
-    if (this.airthingsDevice.sensors.radonShortTermAvg) {
-      this.airQualityService.getCharacteristic("Radon")?.updateValue(
-        this.latestSamples.data.radonShortTermAvg ?? 0
+    if (this.ambisenseDevice.sensors.pm10) {
+      this.airQualityService.getCharacteristic(api.hap.Characteristic.PM10Density).updateValue(
+        this.latestSamples.data.pm10 ?? 0
       );
     }
 
-    if (this.airthingsDevice.sensors.voc) {
-      const temp = this.latestSamples.data.temp ?? 25;
-      const pressure = this.latestSamples.data.pressure ?? 1013;
+    if (this.ambisenseDevice.sensors.tvoc) {
+      const temp = this.latestSamples.data.temperature ?? 25;
+      const pressure = 1013;
       this.airQualityService.getCharacteristic(api.hap.Characteristic.VOCDensity)?.updateValue(
-        this.latestSamples.data.voc != undefined ? this.latestSamples.data.voc * (78 / (22.41 * ((temp + 273) / 273) * (1013 / pressure))) : 0
+        this.latestSamples.data.tvoc != undefined ? this.latestSamples.data.tvoc * (78 / (22.41 * ((temp + 273) / 273) * (1013 / pressure))) : 0
       );
 
       this.airQualityService.getCharacteristic("VOC Density (ppb)")?.updateValue(
-        this.latestSamples.data.voc ?? 0
+        this.latestSamples.data.tvoc ?? 0
       );
     }
 
     this.airQualityService.getCharacteristic(api.hap.Characteristic.StatusActive).updateValue(
-      this.latestSamples.data.time != undefined && Date.now() / 1000 - this.latestSamples.data.time < 2 * 60 * 60
+      this.latestSamples.data.uptime != undefined && Date.now() / 1000 - this.latestSamples.data.uptime < 2 * 60 * 60
     );
 
     // HomeKit Temperature Service
     this.temperatureService.getCharacteristic(api.hap.Characteristic.CurrentTemperature).updateValue(
-      this.latestSamples.data.temp ?? null
+      this.latestSamples.data.temperature ?? 0
     );
 
     this.temperatureService.getCharacteristic(api.hap.Characteristic.StatusActive).updateValue(
-      this.latestSamples.data.temp != undefined && this.latestSamples.data.time != undefined && Date.now() / 1000 - this.latestSamples.data.time < 2 * 60 * 60
+      this.latestSamples.data.temperature != undefined && this.latestSamples.data.uptime != undefined && Date.now() / 1000 - this.latestSamples.data.uptime < 2 * 60 * 60
     );
 
     // HomeKit Humidity Service
@@ -263,7 +240,7 @@ export class AirthingsPlugin implements AccessoryPlugin {
     );
 
     this.humidityService.getCharacteristic(api.hap.Characteristic.StatusActive).updateValue(
-      this.latestSamples.data.humidity != undefined && this.latestSamples.data.time != undefined && Date.now() / 1000 - this.latestSamples.data.time < 2 * 60 * 60
+      this.latestSamples.data.humidity != undefined && this.latestSamples.data.uptime != undefined && Date.now() / 1000 - this.latestSamples.data.uptime < 2 * 60 * 60
     );
 
     // HomeKit CO2 Service
@@ -278,31 +255,11 @@ export class AirthingsPlugin implements AccessoryPlugin {
     );
 
     this.carbonDioxideService.getCharacteristic(api.hap.Characteristic.StatusActive).updateValue(
-      this.latestSamples.data.co2 != undefined && this.latestSamples.data.time != undefined && Date.now() / 1000 - this.latestSamples.data.time < 2 * 60 * 60
-    );
-
-    // Eve Air Pressure Service
-    this.airPressureService.getCharacteristic("Air Pressure")?.updateValue(
-      this.latestSamples.data.pressure ?? 1012
-    );
-
-    this.airPressureService.getCharacteristic(api.hap.Characteristic.StatusActive).updateValue(
-      this.latestSamples.data.pressure != undefined && this.latestSamples.data.time != undefined && Date.now() / 1000 - this.latestSamples.data.time < 2 * 60 * 60
-    );
-
-    // HomeKit Radon (Leak) Service
-    this.radonService.getCharacteristic(api.hap.Characteristic.LeakDetected).updateValue(
-      this.latestSamples.data.radonShortTermAvg == undefined || this.latestSamples.data.radonShortTermAvg < (this.airthingsConfig.radonLeakThreshold ?? 0)
-        ? api.hap.Characteristic.LeakDetected.LEAK_NOT_DETECTED
-        : api.hap.Characteristic.LeakDetected.LEAK_DETECTED
-    );
-
-    this.radonService.getCharacteristic(api.hap.Characteristic.StatusActive).updateValue(
-      this.latestSamples.data.radonShortTermAvg != undefined && this.latestSamples.data.time != undefined && Date.now() / 1000 - this.latestSamples.data.time < 2 * 60 * 60
+      this.latestSamples.data.co2 != undefined && this.latestSamples.data.uptime != undefined && Date.now() / 1000 - this.latestSamples.data.uptime < 2 * 60 * 60
     );
   }
 
-  getAirQuality(api: API, latestSamples: AirthingsApiDeviceSample) {
+  getAirQuality(api: API, latestSamples: AmbisenseApiDeviceSample) {
     let aq = api.hap.Characteristic.AirQuality.UNKNOWN;
 
     const humidity = latestSamples.data.humidity;
@@ -331,12 +288,12 @@ export class AirthingsPlugin implements AccessoryPlugin {
       }
     }
 
-    const mold = latestSamples.data.mold;
-    if (mold != undefined) {
-      if (mold >= 5) {
+    const pm2_5 = latestSamples.data.pm2_5;
+    if (pm2_5 != undefined) {
+      if (pm2_5 >= 25) {
         aq = Math.max(aq, api.hap.Characteristic.AirQuality.POOR);
       }
-      else if (mold >= 3) {
+      else if (pm2_5 >= 10) {
         aq = Math.max(aq, api.hap.Characteristic.AirQuality.FAIR);
       }
       else {
@@ -344,33 +301,7 @@ export class AirthingsPlugin implements AccessoryPlugin {
       }
     }
 
-    const pm25 = latestSamples.data.pm25;
-    if (pm25 != undefined) {
-      if (pm25 >= 25) {
-        aq = Math.max(aq, api.hap.Characteristic.AirQuality.POOR);
-      }
-      else if (pm25 >= 10) {
-        aq = Math.max(aq, api.hap.Characteristic.AirQuality.FAIR);
-      }
-      else {
-        aq = Math.max(aq, api.hap.Characteristic.AirQuality.EXCELLENT);
-      }
-    }
-
-    const radonShortTermAvg = latestSamples.data.radonShortTermAvg;
-    if (radonShortTermAvg != undefined) {
-      if (radonShortTermAvg >= 150) {
-        aq = Math.max(aq, api.hap.Characteristic.AirQuality.POOR);
-      }
-      else if (radonShortTermAvg >= 100) {
-        aq = Math.max(aq, api.hap.Characteristic.AirQuality.FAIR);
-      }
-      else {
-        aq = Math.max(aq, api.hap.Characteristic.AirQuality.EXCELLENT);
-      }
-    }
-
-    const voc = latestSamples.data.voc;
+    const voc = latestSamples.data.tvoc;
     if (voc != undefined) {
       if (voc >= 2000) {
         aq = Math.max(aq, api.hap.Characteristic.AirQuality.POOR);
@@ -387,11 +318,14 @@ export class AirthingsPlugin implements AccessoryPlugin {
   }
 }
 
-interface AirthingsPluginConfig extends AccessoryConfig {
+interface AmbisensePluginConfig extends AccessoryConfig {
   clientId?: string;
   clientSecret?: string;
   serialNumber?: string;
   radonLeakThreshold?: number;
   refreshInterval?: number;
   tokenScope?: string;
+  deviceId?: string;
+  deviceToken?: string;
+  dataPackage?: string;
 }

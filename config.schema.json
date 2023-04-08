@@ -1,7 +1,6 @@
 {
-  "pluginAlias": "Airthings",
+  "pluginAlias": "Ambisense",
   "pluginType": "accessory",
-  "footerDisplay": "Generating a Client ID & Secret: [Airthings Dashboard](https://dashboard.airthings.com) -> Integrations -> Request API Client",
   "schema": {
     "type": "object",
     "properties": {
@@ -9,39 +8,37 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Airthings Device"
+        "default": "Ambisense Device"
       },
-      "clientId": {
-        "title": "Client ID",
+      "deviceId": {
+        "title": "Device ID",
         "type": "string",
         "required": true
       },
-      "clientSecret": {
-        "title": "Client Secret",
+      "deviceToken": {
+        "title": "Device Token",
         "type": "string",
         "required": true
+      },
+      "dataPackage": {
+        "title": "Data Package Name",
+        "type": "string",
+        "required": true
+      },
+      "deviceModel": {
+        "title": "Device Model",
+        "type": "string"
       },
       "serialNumber": {
         "title": "Serial Number",
         "type": "string",
         "required": true
       },
-      "radonLeakThreshold": {
-        "title": "Radon Leak Threshold (Bq/m³)",
-        "type": "number",
-        "required": false
-      },
       "refreshInterval": {
-        "title": "Airthings API Refresh Interval (seconds)",
+        "title": "Ambisense API Refresh Interval (seconds)",
         "type": "number",
         "required": false,
         "default": 150
-      },
-      "tokenScope": {
-        "title": "Airthings API Token Scope",
-        "type": "string",
-        "required": false,
-        "default": "read:device:current_values"
       }
     }
   }
